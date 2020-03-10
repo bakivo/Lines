@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <declare-styleable name="fieldView">
+        <attr name="nodeColor1" format="color" />
+        <attr name="nodeColor2" format="color" />
+        <attr name="nodeColor3" format="color" />
+        <attr name="score" format="integer"/>
+    </declare-styleable>
+</resources>

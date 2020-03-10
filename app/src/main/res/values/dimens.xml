@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="margin_small">8dp</dimen>
+    <dimen name="margin_medium">24dp</dimen>
+    <dimen name="padding_small_1">16dp</dimen>
+    <dimen name="game_square_size">200dp</dimen>
+</resources>
