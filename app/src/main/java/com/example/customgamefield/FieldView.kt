@@ -29,8 +29,11 @@ class FieldView @JvmOverloads constructor(
     private var color3 = 0
     private var touchX = 0f
     private var touchY = 0f
-    private var selectedCell = -1
+    private var selected = -1
     private var isGamesStarted = false
+    // supplementary functions
+    private fun isAnySelected(): Boolean {return selected != -1}
+    private fun isCellEmpty(i: Int): Boolean {return fieldState[i] == COLORS.EMPTY.ordinal}
     // Header vars -------------------------------------------------------------------Game vars
     private val headerAreaRect : RectF = RectF(0f,0f,0f,0f)
     private val numNodesInNewBlock = 3
@@ -39,9 +42,15 @@ class FieldView @JvmOverloads constructor(
     // Field vars ---------------------------------------------------------------
     private val fieldAreaRect: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
     private var fieldSideSize = 0f
-    private val numNodesInLine = 9
-    private val numNodes = numNodesInLine * numNodesInLine
-    private var nodesState = Array(numNodes){COLORS.TYPE2.ordinal}
+    private val size = 9
+    private val dimension = size * size
+    private var fieldState = Array(dimension){COLORS.TYPE2.ordinal}
+    private var column = 0
+    private var raw = 0
+    private var nextIndex = 0
+
+    private val listToCheck = mutableListOf<Int>()
+    private val findings = mutableListOf<Int>()
     // Footer vars -------------------------------------------------------------
     private val  footerAreaRect : RectF = RectF(0f,0f,0f,0f)
     private var score = 0
@@ -76,11 +85,11 @@ class FieldView @JvmOverloads constructor(
     // DRAWING
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        Log.i("FieldView", "Drawing started")
+        //Log.i("FieldView", "Drawing started")
         // draw next block on header ------------------------------------------------------------
         paint.color = Color.MAGENTA
-        canvas.drawText("Hit", 60f,
-                                    headerAreaRect.bottom / 2, paint)
+        canvas.drawText("NEW", 120f,
+                                    headerAreaRect.bottom / 2 + 60, paint)
         if(isGamesStarted){
             for (i in nextBlock.indices){
                 setColorNextCell(i)
@@ -90,21 +99,21 @@ class FieldView @JvmOverloads constructor(
             }
         }
         // draw field---------------------------------------------------------------------------
-        for (index in nodesState.indices){
+        for (index in fieldState.indices){
             setCellColor(index) // update Paint object fill color
             newCell.setNewCellCoordinates(index)
             canvas.drawRoundRect(newCell, CELL.ROUNDNESS.value, CELL.ROUNDNESS.value, paint)
         }
         // highlight selected cell
-        if (selectedCell != -1){
+        if (selected != -1){
             paint.style = Paint.Style.STROKE
             paint.color = Color.WHITE
-            newCell.setNewCellCoordinates(selectedCell)
+            newCell.setNewCellCoordinates(selected)
             canvas.drawRoundRect(newCell, CELL.ROUNDNESS.value, CELL.ROUNDNESS.value, paint)
             paint.style = Paint.Style.FILL
         }
         // draw footer with score--------------------------------------------------------------
-        if(isGamesStarted)  {
+        if (isGamesStarted)  {
             paint.color = Color.WHITE
             canvas.drawText("$score",
                             (footerAreaRect.right - footerAreaRect.left) / 2,
@@ -125,7 +134,7 @@ class FieldView @JvmOverloads constructor(
         }
     }
     private fun setCellColor (i: Int){
-        paint.color = when(nodesState[i]) {
+        paint.color = when(fieldState[i]) {
             0 -> COLORS.EMPTY.v
             1->  COLORS.TYPE1.v
             2 -> COLORS.TYPE2.v
@@ -137,42 +146,102 @@ class FieldView @JvmOverloads constructor(
         }
     }
     private fun getIndex(x: Float, y: Float): Int {
-        return ((y - fieldAreaRect.top) / cellSideSize).toInt() * numNodesInLine + ((x - fieldAreaRect.left) / cellSideSize ).toInt()
+        return ((y - fieldAreaRect.top) / cellSideSize).toInt() * size + ((x - fieldAreaRect.left) / cellSideSize ).toInt()
     }
 
     // CLICKING-----------------------------------------------------------------------------------
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        Log.i("FieldView", "clicked")
         super.onTouchEvent(event)
         touchX = event.x
         touchY = event.y
-        when (event.action){
-            MotionEvent.ACTION_DOWN -> performClick()
+        if (event.action == MotionEvent.ACTION_UP)  {
+            if (fieldAreaRect.isClickedOnField(touchX, touchY)) {
+                if (!isGamesStarted) return true
+                processClick(getIndex(touchX, touchY))
+                invalidate()
+                return true
+            }
+            if (headerAreaRect.isClickedOnField(touchX, touchY)){
+                startGame()
+                invalidate()
+                return true
+            }
         }
         return true
     }
-    override fun performClick(): Boolean {
-        super.performClick()
-        if (fieldAreaRect.isClickedOnField(touchX, touchY)){
-            if (!isGamesStarted) return true
-            selectedCell = getIndex(touchX,touchY)
-            Log.i("FieldView", "pos = $selectedCell")
-            for(value in nextBlock) dropCell(value)
-            generateNewBlock()
+
+    private fun processClick(clicked: Int) {
+        Log.i("FieldView", "pos = $clicked")
+        if (!isAnySelected()) {
+            if (fieldState[clicked] == COLORS.EMPTY.ordinal) return
+            selected = clicked
+            return
+        }
+        if (!tryMove(selected, clicked)) {
+            Log.i("FieldView","No path to move the cell")
+            return
         }
 
+        for(value in nextBlock) dropCell(value)
+        generateNewBlock()
 
-        if (headerAreaRect.isClickedOnField(touchX, touchY)){
-            Log.i("FieldView", "game started")
-            startGame()
+        if (getNumEmptyCells() == 0) {
+            Log.i("FieldView","Game Over")
+            resetState()
         }
-        if (footerAreaRect.isClickedOnField(touchX, touchY)) {
-            Log.i("FieldView", "clicked on footer")
-        }
+    return
+    }
 
-        // Redraw the view.
-        invalidate()
+    private fun tryMove(from: Int, to: Int): Boolean {
+        selected = -1
+        if (from == to) return false
+        if (!findPath(from,to)) return false
+        fieldState[to] = fieldState[from]
+        fieldState[from] = COLORS.EMPTY.ordinal
         return true
+    }
+
+    private fun findPath(from: Int, to: Int): Boolean {
+        findings.clear()
+        listToCheck.clear()
+        listToCheck.add(from)
+        while (listToCheck.isNotEmpty())   {
+            checkAdjacentOf(listToCheck.first())
+        }
+        return findings.contains(to)
+    }
+
+    private fun checkAdjacentOf(index: Int) {
+        // calculate coordinates of cell in field Matrix
+        column = index % size
+        raw = index / size
+
+        // analyze left neighbour
+        nextIndex = raw * size + (column - 1)
+        if ((column > 0) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
+            listToCheck.add(nextIndex)
+            findings.add(nextIndex)
+        }
+        // analyze right neighbour
+        nextIndex = raw * size + (column + 1)
+        if ((column < (size -1)) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
+            listToCheck.add(nextIndex)
+            findings.add(nextIndex)
+        }
+        // analyze top neighbour
+        nextIndex = (raw - 1) * size + column
+        if ((raw > 0) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
+            listToCheck.add(nextIndex)
+            findings.add(nextIndex)
+        }
+        // analyze bottom neighbour
+        nextIndex = (raw + 1) * size + column
+        if ((raw < (size -1)) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
+            listToCheck.add(nextIndex)
+            findings.add(nextIndex)
+        }
+        listToCheck.remove(index)
+        return
     }
 
     // RESIZING------------------------------------------------------------------------------------
@@ -180,9 +249,10 @@ class FieldView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         vertOrientation = w < h
         fieldSideSize = min(w, h).toFloat()
-        cellSideSize = fieldSideSize / numNodesInLine
+        cellSideSize = fieldSideSize / size
         setLayout (w.toFloat(), h.toFloat())
     }
+
     private fun setLayout(w: Float, h: Float) {
         if (vertOrientation){
             fieldAreaRect.left = 0f
@@ -213,8 +283,8 @@ class FieldView @JvmOverloads constructor(
     // EXTENSIONS---------------------------------------------------------------------------------
     private fun RectF.isClickedOnField (x: Float, y: Float) = y in top..bottom && x in left..right
     private fun RectF.setNewCellCoordinates(num: Int) {
-        top = fieldAreaRect.top + (num / numNodesInLine) * cellSideSize + CELL.PADDING.value      //y
-        left = fieldAreaRect.left + (num % numNodesInLine) * cellSideSize + CELL.PADDING.value     //x
+        top = fieldAreaRect.top + (num / size) * cellSideSize + CELL.PADDING.value      //y
+        left = fieldAreaRect.left + (num % size) * cellSideSize + CELL.PADDING.value     //x
         bottom = cellSideSize + top - CELL.PADDING.value
         right = cellSideSize + left - CELL.PADDING.value
     }
@@ -232,7 +302,6 @@ class FieldView @JvmOverloads constructor(
             bottom = top + cellSideSize
         }
     }
-
     // LOGIC -------------------------------------------------------------------------------------
     private fun startGame() {
         resetState()
@@ -240,8 +309,8 @@ class FieldView @JvmOverloads constructor(
 
     private fun resetState() {
         score = 0
-        selectedCell = -1
-        for(i in nodesState.indices) nodesState[i] = COLORS.EMPTY.ordinal
+        selected = -1
+        for(i in fieldState.indices) fieldState[i] = COLORS.EMPTY.ordinal
         generateNewBlock()
         for(value in nextBlock) dropCell(value)
         generateNewBlock()
@@ -250,8 +319,8 @@ class FieldView @JvmOverloads constructor(
 
     private fun getNumEmptyCells(): Int{
         var res = 0
-        for (i in nodesState) if (COLORS.EMPTY.ordinal == i) res++
-        Log.i("FieldView","empties = $res")
+        for (i in fieldState) if (COLORS.EMPTY.ordinal == i) res++
+        //Log.i("FieldView","empties = $res")
         return res
     }
 
@@ -260,14 +329,14 @@ class FieldView @JvmOverloads constructor(
     }
 
     private fun dropCell(value: Int) {
-        var randomIndex = Random.nextInt(0,getNumEmptyCells() - 1)
+        var randomIndex = Random.nextInt(getNumEmptyCells() + 1)
         //Log.i("FieldView","randomIndex to drop at = $randomIndex")
         //Log.i("FieldView","value to drop = $value")
         var curRandomIndex = 0
-        for(i in nodesState.indices){
-            if (nodesState[i] == COLORS.EMPTY.ordinal){
+        for(i in fieldState.indices){
+            if (fieldState[i] == COLORS.EMPTY.ordinal){
                 if( randomIndex == curRandomIndex){
-                    nodesState[i] = value
+                    fieldState[i] = value
                     return
                 }
                 curRandomIndex++
