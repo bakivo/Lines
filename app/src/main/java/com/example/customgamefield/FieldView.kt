@@ -23,44 +23,7 @@ class FieldView @JvmOverloads constructor(
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("", Typeface.BOLD)
     }
-    private var vertOrientation = true
-    private var color1 = 0
-    private var color2 = 0
-    private var color3 = 0
-    private var touchX = 0f
-    private var touchY = 0f
-    private var selected = -1
-    private var isGamesStarted = false
-    // supplementary functions
-    private fun isAnySelected(): Boolean {return selected != -1}
-    private fun isCellEmpty(i: Int): Boolean {return fieldState[i] == COLORS.EMPTY.ordinal}
-    // Header vars -------------------------------------------------------------------Game vars
-    private val headerAreaRect : RectF = RectF(0f,0f,0f,0f)
-    private val numNodesInNewBlock = 3
-    private var nextBlock = Array(numNodesInNewBlock){COLORS.EMPTY.ordinal}
-
-    // Field vars ---------------------------------------------------------------
-    private val fieldAreaRect: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
-    private var fieldSideSize = 0f
-    private val size = 9
-    private val dimension = size * size
-    private var fieldState = Array(dimension){COLORS.TYPE2.ordinal}
-    private var column = 0
-    private var raw = 0
-    private var nextIndex = 0
-
-    private val listToCheck = mutableListOf<Int>()
-    private val findings = mutableListOf<Int>()
-    // Footer vars -------------------------------------------------------------
-    private val  footerAreaRect : RectF = RectF(0f,0f,0f,0f)
-    private var score = 0
-    // Cell vars ---------------------------------------------------------------
-    private val newCell: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
-    private enum class CELL(val value: Float){
-        ROUNDNESS(15f),
-        PADDING(5f)}
-    private var cellSideSize = 0f
-    private enum class COLORS(val v: Int){
+    private enum class COLORS(val value: Int)   {
         EMPTY(Color.LTGRAY),                            // greish
         TYPE1(Color.rgb(255,255,72)),  // yellowish
         TYPE2(Color.rgb(254,133,118)), // peach
@@ -68,17 +31,48 @@ class FieldView @JvmOverloads constructor(
         TYPE4(Color.rgb(123,118,254)), // siren
         TYPE5(Color.rgb(35,251,254)),  // tiffany
         TYPE6(Color.rgb(109,254,108)), // greenish
-
+        LAST(-1)
     }
+    private var vertOrientation = true
+    private var touchX = 0f
+    private var touchY = 0f
+    private var selected = -1
+    private var isGamesStarted = false
+    // supplementary functions
+    private fun isAnySelected(): Boolean {return selected != -1}
+    private fun isCellEmpty(i: Int) = fieldState[i] == COLORS.EMPTY.ordinal
+    // Header vars -------------------------------------------------------------------Game vars
+    private val headerAreaRect : RectF = RectF(0f,0f,0f,0f)
+    private val numNodesInNewBlock = 3
+    private var nextBlock: Array<Int> = Array(numNodesInNewBlock){COLORS.EMPTY.ordinal}
+
+    // Field vars ---------------------------------------------------------------
+    private val fieldAreaRect: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
+    private var fieldSideSize = 0f
+    private val size = 9
+    private val dimension = size * size
+    private var fieldState: Array<Int> = Array(dimension){COLORS.TYPE2.ordinal}
+    private var column = 0
+    private var raw = 0
+    private var nextIndex = 0
+
+    private val listToCheck = mutableListOf<Int>()
+    private val findings = mutableListOf<Int>()
+    // Footer vars -------------------------------------------------------------
+    private val footerAreaRect : RectF = RectF(0f,0f,0f,0f)
+    private var score = 0
+    // Cell vars ---------------------------------------------------------------
+    private val newCell: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
+    private enum class CELL(val value: Float){
+        ROUNDNESS(15f),
+        PADDING(5f)}
+    private var cellSideSize = 0f
     // INITIALIZATION-----------------------------------------------------------
     init {
-        Log.i("FieldView", "initialization")
         isClickable = true
         setBackgroundColor(Color.BLACK);
         context.withStyledAttributes(attrs, R.styleable.fieldView){
-            color1 =getColor(R.styleable.fieldView_nodeColor1,0)
-            color2 =getColor(R.styleable.fieldView_nodeColor2,0)
-            color3 =getColor(R.styleable.fieldView_nodeColor3,0)
+            //
         }
     }
 
@@ -123,25 +117,25 @@ class FieldView @JvmOverloads constructor(
     }
     private fun setColorNextCell(i: Int) {
         paint.color = when(nextBlock[i]) {
-            0 -> COLORS.EMPTY.v
-            1->  COLORS.TYPE1.v
-            2 -> COLORS.TYPE2.v
-            3 -> COLORS.TYPE3.v
-            4 -> COLORS.TYPE4.v
-            5 -> COLORS.TYPE5.v
-            6 -> COLORS.TYPE6.v
+            0 -> COLORS.EMPTY.value
+            1->  COLORS.TYPE1.value
+            2 -> COLORS.TYPE2.value
+            3 -> COLORS.TYPE3.value
+            4 -> COLORS.TYPE4.value
+            5 -> COLORS.TYPE5.value
+            6 -> COLORS.TYPE6.value
             else -> Color.DKGRAY
         }
     }
     private fun setCellColor (i: Int){
         paint.color = when(fieldState[i]) {
-            0 -> COLORS.EMPTY.v
-            1->  COLORS.TYPE1.v
-            2 -> COLORS.TYPE2.v
-            3 -> COLORS.TYPE3.v
-            4 -> COLORS.TYPE4.v
-            5 -> COLORS.TYPE5.v
-            6 -> COLORS.TYPE6.v
+            0 -> COLORS.EMPTY.value
+            1->  COLORS.TYPE1.value
+            2 -> COLORS.TYPE2.value
+            3 -> COLORS.TYPE3.value
+            4 -> COLORS.TYPE4.value
+            5 -> COLORS.TYPE5.value
+            6 -> COLORS.TYPE6.value
             else -> Color.DKGRAY
         }
     }
@@ -302,6 +296,8 @@ class FieldView @JvmOverloads constructor(
             bottom = top + cellSideSize
         }
     }
+
+
     // LOGIC -------------------------------------------------------------------------------------
     private fun startGame() {
         resetState()
@@ -310,28 +306,22 @@ class FieldView @JvmOverloads constructor(
     private fun resetState() {
         score = 0
         selected = -1
-        for(i in fieldState.indices) fieldState[i] = COLORS.EMPTY.ordinal
+        fieldState.fill(COLORS.EMPTY.ordinal)
         generateNewBlock()
         for(value in nextBlock) dropCell(value)
         generateNewBlock()
         isGamesStarted = true
     }
 
-    private fun getNumEmptyCells(): Int{
-        var res = 0
-        for (i in fieldState) if (COLORS.EMPTY.ordinal == i) res++
-        //Log.i("FieldView","empties = $res")
-        return res
-    }
+    private fun getNumEmptyCells(): Int = fieldState.count { it == COLORS.EMPTY.ordinal }
 
     private fun generateNewBlock() {
-        for(i in nextBlock.indices) nextBlock[i] = Random.nextInt(1,7)
+        for(i in nextBlock.indices)
+            nextBlock[i] = Random.nextInt(COLORS.EMPTY.ordinal + 1, COLORS.LAST.ordinal)
     }
 
-    private fun dropCell(value: Int) {
-        var randomIndex = Random.nextInt(getNumEmptyCells() + 1)
-        //Log.i("FieldView","randomIndex to drop at = $randomIndex")
-        //Log.i("FieldView","value to drop = $value")
+    /*private fun dropCell2(value: Int) {
+        var randomIndex = Random.nextInt(0, getNumEmptyCells())
         var curRandomIndex = 0
         for(i in fieldState.indices){
             if (fieldState[i] == COLORS.EMPTY.ordinal){
@@ -342,6 +332,13 @@ class FieldView @JvmOverloads constructor(
                 curRandomIndex++
             }
         }
+    }*/
+    private fun dropCell(cell: Int){
+        fieldState[fieldState.
+                    mapIndexed { index, i -> if(i == 0) index else -1 }.
+                    filter { it > -1 }.
+                    random()] = cell
     }
+
 }
 
