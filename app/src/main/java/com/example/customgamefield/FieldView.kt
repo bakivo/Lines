@@ -33,11 +33,13 @@ class FieldView @JvmOverloads constructor(
         TYPE6(Color.rgb(109,254,108)), // greenish
         LAST(-1)
     }
+    val negative = -1
     private var vertOrientation = true
     private var touchX = 0f
     private var touchY = 0f
     private var selected = -1
     private var isGamesStarted = false
+    private val goal = 5
     // supplementary functions
     private fun isAnySelected(): Boolean {return selected != -1}
     private fun isCellEmpty(i: Int) = fieldState[i] == COLORS.EMPTY.ordinal
@@ -175,15 +177,90 @@ class FieldView @JvmOverloads constructor(
             Log.i("FieldView","No path to move the cell")
             return
         }
-
-        for(value in nextBlock) dropCell(value)
-        generateNewBlock()
-
-        if (getNumEmptyCells() == 0) {
-            Log.i("FieldView","Game Over")
-            resetState()
+        if (!scoreUp(clicked)){
+            Log.i("FieldView","no")
+            for(value in nextBlock) {
+                if (scoreUp(dropCell(value))) Log.i("FieldView","luck after drop $value")
+                else Log.i("FieldView","no after drop $value")
+            }
+            if (getNumEmptyCells() == 0) {
+                Log.i("FieldView","Game Over")
+                resetState()
+            }
+            generateNewBlock()
         }
-    return
+        else Log.i("FieldView","luck after good move")
+        return
+    }
+
+    private fun scoreUp(index: Int): Boolean {
+        val left = -1
+        val right = 1
+        val up = -1
+        val down = 1
+        val same = 0
+        val color = fieldState[index]
+        val line = mutableListOf<Int>()
+        val lines = mutableListOf<Int>()
+        var x: Int
+        var y: Int
+        var scoreUp = 0
+
+        fun isWithinBounds(x: Int, y: Int) = x >= 0 && y >= 0 && x < size && y < size
+        fun checkDirection(x: Int, y: Int, deltaX: Int, deltaY: Int): Unit	{
+            var x = x + deltaX
+            var y = y + deltaY
+            while (isWithinBounds(x ,y))	{
+                var i = y * size + x
+                if (fieldState[i] != color) break
+                line.add(i)
+                x += deltaX
+                y += deltaY
+            }
+        }
+        fun checkLine(): Unit{
+            if (line.size >= goal - 1) {
+                line.forEach{ lines.add(it) }
+                line.clear()
+            }
+        }
+        var column = index % size
+        var raw = index / size
+        //check from index to North-West direction
+        checkDirection(column, raw, left, up)
+        //check from index to South-East direction
+        checkDirection(column, raw, right, down)
+        //check line, drop indices to lines if success and clear buffer line
+        checkLine()
+        //check from index to North-East direction
+        checkDirection(column, raw, right, up)
+        //check from index to South-West direction
+        checkDirection(column, raw, left, down)
+        //check line, drop indices to lines if success and clear buffer line
+        checkLine()
+        //check from index to the left
+        checkDirection(column, raw, left, same)
+        //check from index to the right
+        checkDirection(column, raw, right, same)
+        //check line, drop indices to lines if success and clear buffer line
+        checkLine()
+        //check from index to the up
+        checkDirection(column, raw, same, up)
+        //check from index to the down
+        checkDirection(column, raw, same, down)
+        //check line, drop indices to lines if success and clear buffer line
+        checkLine()
+        Log.i("FieldView", lines.toString())
+        scoreUp = lines.size
+        if (scoreUp > 0){
+            score += scoreUp + 1
+            // clear cells successfully assembled to lines
+            lines.forEach {fieldState[it] = 0}
+            lines.clear()
+            fieldState[index] = 0
+            return true
+        }
+        return false
     }
 
     private fun tryMove(from: Int, to: Int): Boolean {
@@ -333,11 +410,13 @@ class FieldView @JvmOverloads constructor(
             }
         }
     }*/
-    private fun dropCell(cell: Int){
-        fieldState[fieldState.
-                    mapIndexed { index, i -> if(i == 0) index else -1 }.
-                    filter { it > -1 }.
-                    random()] = cell
+    private fun dropCell(color: Int): Int{
+        val index = fieldState.
+                            mapIndexed { index, i -> if (COLORS.EMPTY.ordinal == i) index else negative }.
+                            filter { it > negative }.random()
+
+        fieldState[index] = color
+        return index
     }
 
 }
