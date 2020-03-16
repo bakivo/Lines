@@ -24,7 +24,7 @@ class FieldView @JvmOverloads constructor(
         typeface = Typeface.create("", Typeface.BOLD)
     }
     private enum class COLORS(val value: Int)   {
-        EMPTY(Color.LTGRAY),                            // greish
+        EMPTY(Color.rgb(57,60,69)),    // greish
         TYPE1(Color.rgb(255,255,72)),  // yellowish
         TYPE2(Color.rgb(254,133,118)), // peach
         TYPE3(Color.rgb(254,140,228)), // pinkish
@@ -33,42 +33,39 @@ class FieldView @JvmOverloads constructor(
         TYPE6(Color.rgb(109,254,108)), // greenish
         LAST(-1)
     }
-    val negative = -1
+    private var isGamesStarted = false
+    private val goal = 5
+    private val negative = -1
     private var vertOrientation = true
     private var touchX = 0f
     private var touchY = 0f
     private var selected = -1
-    private var isGamesStarted = false
-    private val goal = 5
-    // supplementary functions
-    private fun isAnySelected(): Boolean {return selected != -1}
-    private fun isCellEmpty(i: Int) = fieldState[i] == COLORS.EMPTY.ordinal
-    // Header vars -------------------------------------------------------------------Game vars
+
     private val headerAreaRect : RectF = RectF(0f,0f,0f,0f)
+    private val fieldAreaRect: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
+    private val newCell: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
+    private val footerAreaRect : RectF = RectF(0f,0f,0f,0f)
+
+    private val size = 8
+    private val dimension = size * size
+    private val range: IntRange = 0 until dimension
+    var score = 0
+    var fieldState: Array<Int> = Array(dimension){ COLORS.TYPE2.ordinal }
     private val numNodesInNewBlock = 3
     private var nextBlock: Array<Int> = Array(numNodesInNewBlock){COLORS.EMPTY.ordinal}
+    private var fieldSize = 0f
 
-    // Field vars ---------------------------------------------------------------
-    private val fieldAreaRect: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
-    private var fieldSideSize = 0f
-    private val size = 9
-    private val dimension = size * size
-    private var fieldState: Array<Int> = Array(dimension){COLORS.TYPE2.ordinal}
     private var column = 0
     private var raw = 0
     private var nextIndex = 0
 
     private val listToCheck = mutableListOf<Int>()
     private val findings = mutableListOf<Int>()
-    // Footer vars -------------------------------------------------------------
-    private val footerAreaRect : RectF = RectF(0f,0f,0f,0f)
-    private var score = 0
     // Cell vars ---------------------------------------------------------------
-    private val newCell: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
     private enum class CELL(val value: Float){
         ROUNDNESS(15f),
         PADDING(5f)}
-    private var cellSideSize = 0f
+    private var cellSize = 0f
     // INITIALIZATION-----------------------------------------------------------
     init {
         isClickable = true
@@ -77,6 +74,9 @@ class FieldView @JvmOverloads constructor(
             //
         }
     }
+    // supplementary functions
+    private fun isAnySelected() = selected != -1
+    private fun isCellEmpty(i: Int) = fieldState[i] == COLORS.EMPTY.ordinal
 
     // DRAWING
     override fun onDraw(canvas: Canvas) {
@@ -142,7 +142,7 @@ class FieldView @JvmOverloads constructor(
         }
     }
     private fun getIndex(x: Float, y: Float): Int {
-        return ((y - fieldAreaRect.top) / cellSideSize).toInt() * size + ((x - fieldAreaRect.left) / cellSideSize ).toInt()
+        return ((y - fieldAreaRect.top) / cellSize).toInt() * size + ((x - fieldAreaRect.left) / cellSize ).toInt()
     }
 
     // CLICKING-----------------------------------------------------------------------------------
@@ -194,11 +194,7 @@ class FieldView @JvmOverloads constructor(
     }
 
     private fun scoreUp(index: Int): Boolean {
-        val left = -1
-        val right = 1
-        val up = -1
-        val down = 1
-        val same = 0
+        val (left, right, up,down, same) = intArrayOf(-1, 1, -1, 1, 0)
         val color = fieldState[index]
         val line = mutableListOf<Int>()
         val lines = mutableListOf<Int>()
@@ -265,16 +261,15 @@ class FieldView @JvmOverloads constructor(
 
     private fun tryMove(from: Int, to: Int): Boolean {
         selected = -1
-        if (from == to) return false
-        if (!findPath(from,to)) return false
-        fieldState[to] = fieldState[from]
-        fieldState[from] = COLORS.EMPTY.ordinal
+        if (from == to || !findPath(from,to)) return false
+        fieldState.moveCell(from, to)
         return true
     }
 
     private fun findPath(from: Int, to: Int): Boolean {
         findings.clear()
         listToCheck.clear()
+
         listToCheck.add(from)
         while (listToCheck.isNotEmpty())   {
             checkAdjacentOf(listToCheck.first())
@@ -319,27 +314,27 @@ class FieldView @JvmOverloads constructor(
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         vertOrientation = w < h
-        fieldSideSize = min(w, h).toFloat()
-        cellSideSize = fieldSideSize / size
+        fieldSize = min(w, h).toFloat()
+        cellSize = fieldSize / size
         setLayout (w.toFloat(), h.toFloat())
     }
 
     private fun setLayout(w: Float, h: Float) {
         if (vertOrientation){
             fieldAreaRect.left = 0f
-            fieldAreaRect.top = (h - fieldSideSize) / 2
-            fieldAreaRect.bottom = fieldAreaRect.top + fieldSideSize
-            fieldAreaRect.right = fieldAreaRect.left + fieldSideSize
+            fieldAreaRect.top = (h - fieldSize) / 2
+            fieldAreaRect.bottom = fieldAreaRect.top + fieldSize
+            fieldAreaRect.right = fieldAreaRect.left + fieldSize
             headerAreaRect.right = w
             headerAreaRect.bottom = fieldAreaRect.top
             footerAreaRect.left = 0f
             footerAreaRect.top = fieldAreaRect.bottom
         }
         else {
-            fieldAreaRect.left = (w - fieldSideSize) / 2
+            fieldAreaRect.left = (w - fieldSize) / 2
             fieldAreaRect.top = 0f
-            fieldAreaRect.bottom = fieldAreaRect.top + fieldSideSize
-            fieldAreaRect.right = fieldAreaRect.left + fieldSideSize
+            fieldAreaRect.bottom = fieldAreaRect.top + fieldSize
+            fieldAreaRect.right = fieldAreaRect.left + fieldSize
             headerAreaRect.right = fieldAreaRect.left
             headerAreaRect.bottom = h
             footerAreaRect.left = fieldAreaRect.right
@@ -354,26 +349,29 @@ class FieldView @JvmOverloads constructor(
     // EXTENSIONS---------------------------------------------------------------------------------
     private fun RectF.isClickedOnField (x: Float, y: Float) = y in top..bottom && x in left..right
     private fun RectF.setNewCellCoordinates(num: Int) {
-        top = fieldAreaRect.top + (num / size) * cellSideSize + CELL.PADDING.value      //y
-        left = fieldAreaRect.left + (num % size) * cellSideSize + CELL.PADDING.value     //x
-        bottom = cellSideSize + top - CELL.PADDING.value
-        right = cellSideSize + left - CELL.PADDING.value
+        top = fieldAreaRect.top + (num / size) * cellSize + CELL.PADDING.value      //y
+        left = fieldAreaRect.left + (num % size) * cellSize + CELL.PADDING.value     //x
+        bottom = cellSize + top - CELL.PADDING.value
+        right = cellSize + left - CELL.PADDING.value
     }
     private fun RectF.setNewDropCellCoordinate(i: Int) {
         if (vertOrientation){
-            left = headerAreaRect.right / 2 - cellSideSize * 3 / 2 + cellSideSize * i
-            top = headerAreaRect.bottom / 2 - cellSideSize / 2
-            right = left + cellSideSize
-            bottom = top + cellSideSize
+            left = headerAreaRect.right / 2 - cellSize * 3 / 2 + cellSize * i
+            top = headerAreaRect.bottom / 2 - cellSize / 2
+            right = left + cellSize
+            bottom = top + cellSize
         }
         else {
-            left = headerAreaRect.right / 2 - cellSideSize / 2
-            top = headerAreaRect.bottom / 2  - cellSideSize * 3 / 2 + cellSideSize * i
-            right = left + cellSideSize
-            bottom = top + cellSideSize
+            left = headerAreaRect.right / 2 - cellSize / 2
+            top = headerAreaRect.bottom / 2  - cellSize * 3 / 2 + cellSize * i
+            right = left + cellSize
+            bottom = top + cellSize
         }
     }
-
+    private fun Array<Int>.moveCell(from: Int, to: Int) {
+        this[to] = this[from]
+        this[from] = COLORS.EMPTY.ordinal
+    }
 
     // LOGIC -------------------------------------------------------------------------------------
     private fun startGame() {
@@ -418,6 +416,7 @@ class FieldView @JvmOverloads constructor(
         fieldState[index] = color
         return index
     }
+
 
 }
 
