@@ -19,146 +19,159 @@ class FieldView @JvmOverloads constructor(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
         strokeWidth = 4f
-        textSize = 100f
+        textSize = 65f
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("", Typeface.BOLD)
     }
-    private enum class COLORS(val value: Int)   {
-        EMPTY(Color.rgb(57,60,69)),    // greish
-        TYPE1(Color.rgb(255,255,72)),  // yellowish
+    private enum class Colors(val rgb: Int)   {
+        EMPTY(Color.rgb(57, 60, 69)),  // blackish
+        TYPE1(Color.rgb(185,164,70)),  // yellowish
         TYPE2(Color.rgb(254,133,118)), // peach
-        TYPE3(Color.rgb(254,140,228)), // pinkish
+        TYPE3(Color.rgb(167,110,164)), // pinkish
         TYPE4(Color.rgb(123,118,254)), // siren
-        TYPE5(Color.rgb(35,251,254)),  // tiffany
-        TYPE6(Color.rgb(109,254,108)), // greenish
+        TYPE5(Color.rgb(105,165,185)), // bluish
+        TYPE6(Color.rgb(109,185,111)), // greenish
         LAST(-1)
     }
-    private var isGamesStarted = false
+    companion object State {
+        private const val numNodesInNewBlock = 3
+        private const val size = 8
+        private const val dimension = size * size
+        val nextBlock: Array<Int> = Array(this.numNodesInNewBlock){ Colors.EMPTY.ordinal }
+        val fieldState: Array<Int> = Array(this.dimension){ Colors.EMPTY.ordinal }
+        var isGamesStarted = false
+        var score = 0
+    }
+    // state vars
     private val goal = 5
     private val negative = -1
+    private var selectedCell = negative
+    // layout vars
     private var vertOrientation = true
-    private var touchX = 0f
-    private var touchY = 0f
-    private var selected = -1
+    private val headerArea : RectF = RectF()
+    private val newFrame: RectF = RectF()
+    private val newXY: PointF = PointF()
+    private var dropFrameSize = 0f
+    private val dropFrame: RectF = RectF()
 
-    private val headerAreaRect : RectF = RectF(0f,0f,0f,0f)
-    private val fieldAreaRect: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
-    private val newCell: RectF = RectF(0.0f,0.0f,0.0f,0.0f)
-    private val footerAreaRect : RectF = RectF(0f,0f,0f,0f)
-
-    private val size = 8
-    private val dimension = size * size
-    private val range: IntRange = 0 until dimension
-    var score = 0
-    var fieldState: Array<Int> = Array(dimension){ COLORS.TYPE2.ordinal }
-    private val numNodesInNewBlock = 3
-    private var nextBlock: Array<Int> = Array(numNodesInNewBlock){COLORS.EMPTY.ordinal}
     private var fieldSize = 0f
-
-    private var column = 0
-    private var raw = 0
-    private var nextIndex = 0
-
-    private val listToCheck = mutableListOf<Int>()
-    private val findings = mutableListOf<Int>()
-    // Cell vars ---------------------------------------------------------------
-    private enum class CELL(val value: Float){
-        ROUNDNESS(15f),
-        PADDING(5f)}
+    private val fieldArea: RectF = RectF()
     private var cellSize = 0f
-    // INITIALIZATION-----------------------------------------------------------
+
+    private val cell: RectF = RectF()
+    private val footerArea: RectF = RectF()
+    private val scoreXY: PointF = PointF()
+
+    private val cellPadding = 5f
+    private val cellRoundness = 15f
+    // INITIALIZATION
     init {
         isClickable = true
         setBackgroundColor(Color.BLACK);
         context.withStyledAttributes(attrs, R.styleable.fieldView){
-            //
+            // might be added
         }
     }
-    // supplementary functions
-    private fun isAnySelected() = selected != -1
-    private fun isCellEmpty(i: Int) = fieldState[i] == COLORS.EMPTY.ordinal
-
+    // CONVENIENCE
+    private fun isAnySelected() = selectedCell != -1
+    private fun isCellEmpty(index: Int) = fieldState[index] == Colors.EMPTY.ordinal
+    // EXTENSIONS
+    private fun RectF.isClickedOn(x: Float, y: Float) = y in top..bottom && x in left..right
+    private fun RectF.setFieldCellXY(index: Int) {
+        // field rectangular's top and left coordinates are 0 for calculating current cell's coordinates
+        left = fieldArea.left + (index % size) * cellSize + cellPadding
+        top =  fieldArea.top +  (index / size) * cellSize + cellPadding
+        // bottom and right are calculated simple as
+        right = left + cellSize - cellPadding
+        bottom = top + cellSize - cellPadding
+    }
+    private fun RectF.setDropCellXY(index: Int) {
+        if (vertOrientation){
+            left = dropFrame.left + index * cellSize + cellPadding
+            top = dropFrame.top + cellPadding
+            right = left + cellSize - cellPadding
+            bottom = top + cellSize - cellPadding
+        }
+        else {
+            left = dropFrame.left + cellPadding
+            top = dropFrame.top + index * cellSize
+            right = left + cellSize - cellPadding
+            bottom = top + cellSize - cellPadding
+        }
+    }
+    private fun Array<Int>.moveCell(from: Int, to: Int) {
+        this[to] = this[from]
+        this[from] = Colors.EMPTY.ordinal
+    }
+    private fun Array<Int>.getColor(index: Int): Int = when (this[index]) {
+            Colors.EMPTY.ordinal -> Colors.EMPTY.rgb
+            Colors.TYPE1.ordinal -> Colors.TYPE1.rgb
+            Colors.TYPE2.ordinal -> Colors.TYPE2.rgb
+            Colors.TYPE3.ordinal -> Colors.TYPE3.rgb
+            Colors.TYPE4.ordinal -> Colors.TYPE4.rgb
+            Colors.TYPE5.ordinal -> Colors.TYPE5.rgb
+            Colors.TYPE6.ordinal -> Colors.TYPE6.rgb
+            else -> negative
+    }
     // DRAWING
+    val fieldIndices: IntRange = fieldState.indices
+    val dropIndices: IntRange = nextBlock.indices
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
-        //Log.i("FieldView", "Drawing started")
-        // draw next block on header ------------------------------------------------------------
-        paint.color = Color.MAGENTA
-        canvas.drawText("NEW", 120f,
-                                    headerAreaRect.bottom / 2 + 60, paint)
-        if(isGamesStarted){
-            for (i in nextBlock.indices){
-                setColorNextCell(i)
-                newCell.setNewDropCellCoordinate(i)
-                canvas.drawRoundRect(newCell, CELL.ROUNDNESS.value,
-                                                CELL.ROUNDNESS.value, paint)
+        canvas.apply {
+            // draw field based on values of fieldState array------------------------------------------
+            for (index in fieldIndices) {
+                drawRoundRect(cell.apply { setFieldCellXY(index) }, cellRoundness, cellRoundness,
+                    paint.apply { color = fieldState.getColor(index) })
+            }
+            // draw -- boundary of selected cell -- on the field
+            if (isAnySelected()) {
+                    drawRoundRect(cell.apply { setFieldCellXY(selectedCell) },
+                    cellRoundness, cellRoundness,
+                    paint.apply { color = Color.WHITE
+                        style = Paint.Style.STROKE})
+                paint.style = Paint.Style.FILL
+            }
+            //draw -- button NEW -- on the header
+            drawText("New", newXY.x, newXY.y, paint.apply { color = Color.WHITE })
+
+            if (isGamesStarted)  {
+                // draw -- block with next cells to be dropped -- on header
+                for (index in dropIndices){
+                    drawRoundRect(cell.apply { setDropCellXY(index) },
+                        cellRoundness, cellRoundness,
+                        paint.apply { color = nextBlock.getColor(index) })
+                }
+                // draw -- score -- on footer
+                drawText("$score", scoreXY.x, scoreXY.y, paint.apply { color = Color.WHITE })
             }
         }
-        // draw field---------------------------------------------------------------------------
-        for (index in fieldState.indices){
-            setCellColor(index) // update Paint object fill color
-            newCell.setNewCellCoordinates(index)
-            canvas.drawRoundRect(newCell, CELL.ROUNDNESS.value, CELL.ROUNDNESS.value, paint)
-        }
-        // highlight selected cell
-        if (selected != -1){
-            paint.style = Paint.Style.STROKE
-            paint.color = Color.WHITE
-            newCell.setNewCellCoordinates(selected)
-            canvas.drawRoundRect(newCell, CELL.ROUNDNESS.value, CELL.ROUNDNESS.value, paint)
-            paint.style = Paint.Style.FILL
-        }
-        // draw footer with score--------------------------------------------------------------
-        if (isGamesStarted)  {
-            paint.color = Color.WHITE
-            canvas.drawText("$score",
-                            (footerAreaRect.right - footerAreaRect.left) / 2,
-                            fieldAreaRect.bottom + (footerAreaRect.bottom - footerAreaRect.top) / 2,
-                                paint)
-        }
     }
-    private fun setColorNextCell(i: Int) {
-        paint.color = when(nextBlock[i]) {
-            0 -> COLORS.EMPTY.value
-            1->  COLORS.TYPE1.value
-            2 -> COLORS.TYPE2.value
-            3 -> COLORS.TYPE3.value
-            4 -> COLORS.TYPE4.value
-            5 -> COLORS.TYPE5.value
-            6 -> COLORS.TYPE6.value
-            else -> Color.DKGRAY
-        }
-    }
-    private fun setCellColor (i: Int){
-        paint.color = when(fieldState[i]) {
-            0 -> COLORS.EMPTY.value
-            1->  COLORS.TYPE1.value
-            2 -> COLORS.TYPE2.value
-            3 -> COLORS.TYPE3.value
-            4 -> COLORS.TYPE4.value
-            5 -> COLORS.TYPE5.value
-            6 -> COLORS.TYPE6.value
-            else -> Color.DKGRAY
-        }
-    }
+
     private fun getIndex(x: Float, y: Float): Int {
-        return ((y - fieldAreaRect.top) / cellSize).toInt() * size + ((x - fieldAreaRect.left) / cellSize ).toInt()
+        return ((y - fieldArea.top) / cellSize).toInt() * size + ((x - fieldArea.left) / cellSize ).toInt()
     }
 
     // CLICKING-----------------------------------------------------------------------------------
+    private var touchX = 0f
+    private var touchY = 0f
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         super.onTouchEvent(event)
         touchX = event.x
         touchY = event.y
-        if (event.action == MotionEvent.ACTION_UP)  {
-            if (fieldAreaRect.isClickedOnField(touchX, touchY)) {
-                if (!isGamesStarted) return true
+        if (event.action == MotionEvent.ACTION_UP) {
+
+            if (fieldArea.isClickedOn(touchX, touchY) && isGamesStarted) {
                 processClick(getIndex(touchX, touchY))
+
                 invalidate()
                 return true
             }
-            if (headerAreaRect.isClickedOnField(touchX, touchY)){
+            if (newFrame.isClickedOn(touchX, touchY)) {
                 startGame()
+
                 invalidate()
                 return true
             }
@@ -169,11 +182,11 @@ class FieldView @JvmOverloads constructor(
     private fun processClick(clicked: Int) {
         Log.i("FieldView", "pos = $clicked")
         if (!isAnySelected()) {
-            if (fieldState[clicked] == COLORS.EMPTY.ordinal) return
-            selected = clicked
+            if (fieldState[clicked] == Colors.EMPTY.ordinal) return
+            selectedCell = clicked
             return
         }
-        if (!tryMove(selected, clicked)) {
+        if (!tryMove(selectedCell, clicked)) {
             Log.i("FieldView","No path to move the cell")
             return
         }
@@ -220,6 +233,7 @@ class FieldView @JvmOverloads constructor(
                 line.clear()
             }
         }
+
         var column = index % size
         var raw = index / size
         //check from index to North-West direction
@@ -260,13 +274,54 @@ class FieldView @JvmOverloads constructor(
     }
 
     private fun tryMove(from: Int, to: Int): Boolean {
-        selected = -1
+
+        selectedCell = negative
         if (from == to || !findPath(from,to)) return false
         fieldState.moveCell(from, to)
         return true
     }
 
+    // intermediate vars
+    private var column = 0      // for checkAdjacentOf()
+    private var raw = 0         // ...................
+    private var nextIndex = 0   // for checkAdjacentOf()
+    private val listToCheck = mutableListOf<Int>()
+    private val findings = mutableListOf<Int>()
     private fun findPath(from: Int, to: Int): Boolean {
+
+        fun checkAdjacentOf(index: Int) {
+            // calculate coordinates of cell in field Matrix
+            column = index % size
+            raw = index / size
+
+            // analyze left neighbour
+            nextIndex = raw * size + (column - 1)
+            if ((column > 0) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
+                listToCheck.add(nextIndex)
+                findings.add(nextIndex)
+            }
+            // analyze right neighbour
+            nextIndex = raw * size + (column + 1)
+            if ((column < (size -1)) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
+                listToCheck.add(nextIndex)
+                findings.add(nextIndex)
+            }
+            // analyze top neighbour
+            nextIndex = (raw - 1) * size + column
+            if ((raw > 0) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
+                listToCheck.add(nextIndex)
+                findings.add(nextIndex)
+            }
+            // analyze bottom neighbour
+            nextIndex = (raw + 1) * size + column
+            if ((raw < (size -1)) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
+                listToCheck.add(nextIndex)
+                findings.add(nextIndex)
+            }
+            listToCheck.remove(index)
+            return
+        }
+
         findings.clear()
         listToCheck.clear()
 
@@ -276,103 +331,98 @@ class FieldView @JvmOverloads constructor(
         }
         return findings.contains(to)
     }
-
-    private fun checkAdjacentOf(index: Int) {
-        // calculate coordinates of cell in field Matrix
-        column = index % size
-        raw = index / size
-
-        // analyze left neighbour
-        nextIndex = raw * size + (column - 1)
-        if ((column > 0) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
-            listToCheck.add(nextIndex)
-            findings.add(nextIndex)
-        }
-        // analyze right neighbour
-        nextIndex = raw * size + (column + 1)
-        if ((column < (size -1)) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
-            listToCheck.add(nextIndex)
-            findings.add(nextIndex)
-        }
-        // analyze top neighbour
-        nextIndex = (raw - 1) * size + column
-        if ((raw > 0) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
-            listToCheck.add(nextIndex)
-            findings.add(nextIndex)
-        }
-        // analyze bottom neighbour
-        nextIndex = (raw + 1) * size + column
-        if ((raw < (size -1)) && isCellEmpty(nextIndex) && !findings.contains(nextIndex)){
-            listToCheck.add(nextIndex)
-            findings.add(nextIndex)
-        }
-        listToCheck.remove(index)
-        return
-    }
-
     // RESIZING------------------------------------------------------------------------------------
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        vertOrientation = w < h
-        fieldSize = min(w, h).toFloat()
-        cellSize = fieldSize / size
-        setLayout (w.toFloat(), h.toFloat())
+        setLayout(w.toFloat(), h.toFloat())
     }
-
     private fun setLayout(w: Float, h: Float) {
+        // (0, 0, w, h) is rectangle to fit fieldArea, headerArea and footerArea in
+        // in horizontal orientation headerArea and footerArea placed
+        // to the left and to the right side of fieldArea respectively
+        fieldSize = min(w, h)
+        cellSize = fieldSize / size
+        dropFrameSize = numNodesInNewBlock * cellSize
+        vertOrientation = w < h
         if (vertOrientation){
-            fieldAreaRect.left = 0f
-            fieldAreaRect.top = (h - fieldSize) / 2
-            fieldAreaRect.bottom = fieldAreaRect.top + fieldSize
-            fieldAreaRect.right = fieldAreaRect.left + fieldSize
-            headerAreaRect.right = w
-            headerAreaRect.bottom = fieldAreaRect.top
-            footerAreaRect.left = 0f
-            footerAreaRect.top = fieldAreaRect.bottom
+            fieldArea.apply {
+                left = 0f
+                top = (h - fieldSize) / 2
+                right = left + fieldSize
+                bottom = top + fieldSize
+            }
+            headerArea.apply {
+                left = 0f
+                top = 0f
+                right = w
+                bottom = fieldArea.top
+            }
+            footerArea.apply {
+                left = 0f
+                top = fieldArea.bottom
+                right = w
+                bottom = h
+            }
         }
         else {
-            fieldAreaRect.left = (w - fieldSize) / 2
-            fieldAreaRect.top = 0f
-            fieldAreaRect.bottom = fieldAreaRect.top + fieldSize
-            fieldAreaRect.right = fieldAreaRect.left + fieldSize
-            headerAreaRect.right = fieldAreaRect.left
-            headerAreaRect.bottom = h
-            footerAreaRect.left = fieldAreaRect.right
-            footerAreaRect.top = 0f
+            fieldArea.apply {
+                left = (w - fieldSize) / 2
+                top = 0f
+                right = left + fieldSize
+                bottom = top + fieldSize
+            }
+            headerArea.apply {
+                left = 0f
+                top = 0f
+                right = fieldArea.left
+                bottom = h
+            }
+            footerArea.apply {
+                left = fieldArea.right
+                top = 0f
+                right = w
+                bottom = h
+            }
         }
-        headerAreaRect.left = 0f
-        headerAreaRect.top = 0f
-        footerAreaRect.right = w
-        footerAreaRect.bottom = h
-    }
-
-    // EXTENSIONS---------------------------------------------------------------------------------
-    private fun RectF.isClickedOnField (x: Float, y: Float) = y in top..bottom && x in left..right
-    private fun RectF.setNewCellCoordinates(num: Int) {
-        top = fieldAreaRect.top + (num / size) * cellSize + CELL.PADDING.value      //y
-        left = fieldAreaRect.left + (num % size) * cellSize + CELL.PADDING.value     //x
-        bottom = cellSize + top - CELL.PADDING.value
-        right = cellSize + left - CELL.PADDING.value
-    }
-    private fun RectF.setNewDropCellCoordinate(i: Int) {
-        if (vertOrientation){
-            left = headerAreaRect.right / 2 - cellSize * 3 / 2 + cellSize * i
-            top = headerAreaRect.bottom / 2 - cellSize / 2
-            right = left + cellSize
-            bottom = top + cellSize
+        // set coordinates for objects inside header
+        dropFrame.apply {
+            if (vertOrientation){
+                left = (headerArea.width() - dropFrameSize) / 2
+                top = (headerArea.height() - cellSize) / 2
+                right  = left + dropFrameSize
+                bottom = top + cellSize
+            }
+            else{
+                left = (headerArea.width() - cellSize ) / 2
+                top = (headerArea.height() - dropFrameSize) / 2
+                right = left + cellSize
+                bottom = top + dropFrameSize
+            }
         }
-        else {
-            left = headerAreaRect.right / 2 - cellSize / 2
-            top = headerAreaRect.bottom / 2  - cellSize * 3 / 2 + cellSize * i
-            right = left + cellSize
-            bottom = top + cellSize
+        newFrame.apply {
+            if (vertOrientation) {
+                left = (dropFrame.left - cellSize) / 2
+                top = dropFrame.top
+                right = left + cellSize
+                bottom = dropFrame.bottom
+            }
+            else {
+                left = dropFrame.left
+                top = (dropFrame.top - cellSize) / 2
+                right = dropFrame.right
+                bottom = top + cellSize
+            }
+        }
+        newXY.apply {
+            x = newFrame.left + newFrame.width() / 2
+            y = newFrame.top + newFrame.height() / 3 * 2
+        }
+        // set coordinates for score text inside footer
+        footerArea.apply {
+            scoreXY.x = left + (right - left) / 2
+            scoreXY.y = top + (bottom - top) / 2
         }
     }
-    private fun Array<Int>.moveCell(from: Int, to: Int) {
-        this[to] = this[from]
-        this[from] = COLORS.EMPTY.ordinal
-    }
-
     // LOGIC -------------------------------------------------------------------------------------
     private fun startGame() {
         resetState()
@@ -380,37 +430,24 @@ class FieldView @JvmOverloads constructor(
 
     private fun resetState() {
         score = 0
-        selected = -1
-        fieldState.fill(COLORS.EMPTY.ordinal)
+        selectedCell = -1
+        fieldState.fill(Colors.EMPTY.ordinal)
         generateNewBlock()
         for(value in nextBlock) dropCell(value)
         generateNewBlock()
         isGamesStarted = true
     }
 
-    private fun getNumEmptyCells(): Int = fieldState.count { it == COLORS.EMPTY.ordinal }
+    private fun getNumEmptyCells(): Int = fieldState.count { it == Colors.EMPTY.ordinal }
 
     private fun generateNewBlock() {
         for(i in nextBlock.indices)
-            nextBlock[i] = Random.nextInt(COLORS.EMPTY.ordinal + 1, COLORS.LAST.ordinal)
+            nextBlock[i] = Random.nextInt(Colors.EMPTY.ordinal + 1, Colors.LAST.ordinal)
     }
 
-    /*private fun dropCell2(value: Int) {
-        var randomIndex = Random.nextInt(0, getNumEmptyCells())
-        var curRandomIndex = 0
-        for(i in fieldState.indices){
-            if (fieldState[i] == COLORS.EMPTY.ordinal){
-                if( randomIndex == curRandomIndex){
-                    fieldState[i] = value
-                    return
-                }
-                curRandomIndex++
-            }
-        }
-    }*/
     private fun dropCell(color: Int): Int{
         val index = fieldState.
-                            mapIndexed { index, i -> if (COLORS.EMPTY.ordinal == i) index else negative }.
+                            mapIndexed { index, i -> if (Colors.EMPTY.ordinal == i) index else negative }.
                             filter { it > negative }.random()
 
         fieldState[index] = color

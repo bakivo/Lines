@@ -11,8 +11,5 @@
     <com.example.customgamefield.FieldView
         android:id="@+id/fieldView"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:nodeColor1="#00BCD4"
-        app:nodeColor2="#4CAF50"
-        app:nodeColor3="#009688" />
+        android:layout_height="match_parent"/>
 </androidx.constraintlayout.widget.ConstraintLayout>
