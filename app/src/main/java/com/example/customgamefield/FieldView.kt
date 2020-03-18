@@ -5,7 +5,9 @@ import android.util.AttributeSet
 import android.view.View
 import android.graphics.Typeface
 import android.util.Log
+import android.view.Gravity
 import android.view.MotionEvent
+import android.widget.Toast
 import androidx.core.content.withStyledAttributes
 import kotlin.math.min
 import kotlin.random.Random
@@ -48,6 +50,7 @@ class FieldView @JvmOverloads constructor(
     private var selectedCell = negative
     // layout vars
     private var vertOrientation = true
+
     private val headerArea : RectF = RectF()
     private val newFrame: RectF = RectF()
     private val newXY: PointF = PointF()
@@ -57,15 +60,20 @@ class FieldView @JvmOverloads constructor(
     private var fieldSize = 0f
     private val fieldArea: RectF = RectF()
     private var cellSize = 0f
-
     private val cell: RectF = RectF()
+
     private val footerArea: RectF = RectF()
     private val scoreXY: PointF = PointF()
-
+    //
     private val cellPadding = 5f
     private val cellRoundness = 15f
+
+    private val text = "Hello toast!"
+    private val duration = Toast.LENGTH_SHORT
+    val toast = Toast.makeText(context, text, duration)
     // INITIALIZATION
     init {
+        toast.setGravity(Gravity.CENTER,0,0)
         isClickable = true
         setBackgroundColor(Color.BLACK);
         context.withStyledAttributes(attrs, R.styleable.fieldView){
@@ -75,6 +83,8 @@ class FieldView @JvmOverloads constructor(
     // CONVENIENCE
     private fun isAnySelected() = selectedCell != -1
     private fun isCellEmpty(index: Int) = fieldState[index] == Colors.EMPTY.ordinal
+    private fun getNumEmptyCells(): Int = fieldState.count { it == Colors.EMPTY.ordinal }
+    private fun toast(s: String){ toast.apply { setText(s) }.show() }
     // EXTENSIONS
     private fun RectF.isClickedOn(x: Float, y: Float) = y in top..bottom && x in left..right
     private fun RectF.setFieldCellXY(index: Int) {
@@ -156,54 +166,64 @@ class FieldView @JvmOverloads constructor(
     // CLICKING-----------------------------------------------------------------------------------
     private var touchX = 0f
     private var touchY = 0f
-
     override fun onTouchEvent(event: MotionEvent): Boolean {
         super.onTouchEvent(event)
         touchX = event.x
         touchY = event.y
         if (event.action == MotionEvent.ACTION_UP) {
-
             if (fieldArea.isClickedOn(touchX, touchY) && isGamesStarted) {
                 processClick(getIndex(touchX, touchY))
-
                 invalidate()
                 return true
             }
             if (newFrame.isClickedOn(touchX, touchY)) {
                 startGame()
-
                 invalidate()
                 return true
             }
         }
         return true
     }
-
+    private fun startGame() {
+        score = 0
+        selectedCell = -1
+        fieldState.fill(Colors.EMPTY.ordinal)
+        generateNewBlock()
+        for(value in nextBlock) dropCell(value)
+        generateNewBlock()
+        isGamesStarted = true
+        toast("Go!")
+    }
     private fun processClick(clicked: Int) {
-        Log.i("FieldView", "pos = $clicked")
         if (!isAnySelected()) {
             if (fieldState[clicked] == Colors.EMPTY.ordinal) return
             selectedCell = clicked
             return
         }
+
         if (!tryMove(selectedCell, clicked)) {
-            Log.i("FieldView","No path to move the cell")
+            toast("You shall not pass!")
             return
         }
-        if (!scoreUp(clicked)){
-            Log.i("FieldView","no")
-            for(value in nextBlock) {
-                if (scoreUp(dropCell(value))) Log.i("FieldView","luck after drop $value")
-                else Log.i("FieldView","no after drop $value")
-            }
-            if (getNumEmptyCells() == 0) {
-                Log.i("FieldView","Game Over")
-                resetState()
-            }
-            generateNewBlock()
+
+        if (scoreUp(clicked)) return
+        val temp = min(getNumEmptyCells(), numNodesInNewBlock) - 1
+        for(index in 0..temp) {
+            scoreUp(dropCell(nextBlock[index]))
         }
-        else Log.i("FieldView","luck after good move")
-        return
+
+        if (getNumEmptyCells() == 0) {
+            toast("Good game though!")
+            gameOver()
+            return
+        }
+        generateNewBlock()
+
+    }
+
+    private fun gameOver() {
+        isGamesStarted = false
+        fieldState.fill(Colors.EMPTY.ordinal)
     }
 
     private fun scoreUp(index: Int): Boolean {
@@ -260,14 +280,14 @@ class FieldView @JvmOverloads constructor(
         checkDirection(column, raw, same, down)
         //check line, drop indices to lines if success and clear buffer line
         checkLine()
-        Log.i("FieldView", lines.toString())
-        scoreUp = lines.size
-        if (scoreUp > 0){
-            score += scoreUp + 1
+        if (lines.size > 0){
+            scoreUp = lines.size + 1
+            score += scoreUp
             // clear cells successfully assembled to lines
-            lines.forEach {fieldState[it] = 0}
+            lines.forEach { fieldState[it] = 0 }
             lines.clear()
             fieldState[index] = 0
+            toast("+$scoreUp")
             return true
         }
         return false
@@ -424,21 +444,7 @@ class FieldView @JvmOverloads constructor(
         }
     }
     // LOGIC -------------------------------------------------------------------------------------
-    private fun startGame() {
-        resetState()
-    }
 
-    private fun resetState() {
-        score = 0
-        selectedCell = -1
-        fieldState.fill(Colors.EMPTY.ordinal)
-        generateNewBlock()
-        for(value in nextBlock) dropCell(value)
-        generateNewBlock()
-        isGamesStarted = true
-    }
-
-    private fun getNumEmptyCells(): Int = fieldState.count { it == Colors.EMPTY.ordinal }
 
     private fun generateNewBlock() {
         for(i in nextBlock.indices)
