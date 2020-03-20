@@ -4,6 +4,7 @@ import android.graphics.*
 import android.util.AttributeSet
 import android.view.View
 import android.graphics.Typeface
+import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.widget.Toast
@@ -15,13 +16,23 @@ class FieldView @JvmOverloads constructor(
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0
 ) : View(context, attrs, defStyleAttr) {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+
+    private val paintCell = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         style = Paint.Style.FILL
-        strokeWidth = 4f
+        //typeface = Typeface.create("", Typeface.BOLD)
+    }
+    private val paintStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 6f
+        color = Color.WHITE
+    }
+    private val paintText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE
         textSize = 65f
         textAlign = Paint.Align.CENTER
         typeface = Typeface.create("", Typeface.BOLD)
     }
+
     private enum class Colors(val rgb: Int)   {
         EMPTY(Color.rgb(57, 60, 69)),  // blackish
         TYPE1(Color.rgb(185,164,70)),  // yellowish
@@ -32,6 +43,7 @@ class FieldView @JvmOverloads constructor(
         TYPE6(Color.rgb(109,185,111)), // greenish
         LAST(-1)
     }
+
     companion object State {
         private const val goal = 5
         private const val numNextBlockCells = 3
@@ -42,6 +54,7 @@ class FieldView @JvmOverloads constructor(
         var isGamesStarted = false
         var score = 0
     }
+
     // const
     private val negative = -1
     private val cellPadding = 5f
@@ -77,9 +90,12 @@ class FieldView @JvmOverloads constructor(
     private val findings = mutableListOf<Int>()
     private var randomDropIndex = 0
     private var scoreUp = 0
-    private var bonus = 0
     private var numLinesBuilt = 0
+    private val line = mutableListOf<Int>()
+    private val points = mutableListOf<Int>()
+    private val rules: List<String> = listOf("Make 5 in line", "to score", "and", "to fight chaos")
     // INITIALIZATION
+
     init {
         toast.setGravity(Gravity.CENTER,0,0)
         isClickable = true
@@ -88,15 +104,22 @@ class FieldView @JvmOverloads constructor(
             // might be added
         }
     }
+
     // CONVENIENCE
     private fun isAnySelected() = selectedCell != negative
+
     private fun noSelected() = selectedCell == negative
+
     private fun isCellEmpty(index: Int) = fieldState[index] == Colors.EMPTY.ordinal
+
     private fun isCellColoured(index: Int) = fieldState[index] != Colors.EMPTY.ordinal
+
     private fun getNumEmptyCells(): Int = fieldState.count { it == Colors.EMPTY.ordinal }
+
     private fun toast(s: String){ toast.apply { setText(s) }.show() }
     // EXTENSIONS
     private fun RectF.isClickedOn(x: Float, y: Float) = y in top..bottom && x in left..right
+
     private fun RectF.setFieldCellXY(index: Int) {
         // field rectangular's top and left coordinates are 0 for calculating current cell's coordinates
         left = fieldArea.left + (index % size) * cellSize + cellPadding
@@ -105,6 +128,7 @@ class FieldView @JvmOverloads constructor(
         right = left + cellSize - cellPadding
         bottom = top + cellSize - cellPadding
     }
+
     private fun RectF.setDropCellXY(index: Int) {
         if (verticalLayout){
             left = dropFrame.left + index * cellSize + cellPadding
@@ -119,11 +143,13 @@ class FieldView @JvmOverloads constructor(
             bottom = top + cellSize - cellPadding
         }
     }
+
     private fun Array<Int>.moveCell(from: Int, to: Int): Boolean {
         this[to] = this[from]
         this[from] = Colors.EMPTY.ordinal
         return true
     }
+
     private fun Array<Int>.getColor(index: Int): Int = when (this[index]) {
             Colors.EMPTY.ordinal -> Colors.EMPTY.rgb
             Colors.TYPE1.ordinal -> Colors.TYPE1.rgb
@@ -134,11 +160,13 @@ class FieldView @JvmOverloads constructor(
             Colors.TYPE6.ordinal -> Colors.TYPE6.rgb
             else -> negative
     }
+
     // RESIZING------------------------------------------------------------------------------------
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
         setLayout(w.toFloat(), h.toFloat())
     }
+
     private fun setLayout(w: Float, h: Float) {
         // (0, 0, w, h) is rectangle to fit field Area, header Area and footer Area in
         // in horizontal orientation header and footer are placed
@@ -238,29 +266,35 @@ class FieldView @JvmOverloads constructor(
         super.onDraw(canvas)
         canvas.apply {
             //draw new button
-            drawText("New", newXY.x, newXY.y, paint.apply { color = Color.WHITE })
-            //draw field
-            for (index in fieldIndices) {
-                drawRoundRect(cell.apply { setFieldCellXY(index) },
-                                cellRoundness, cellRoundness,
-                                    paint.apply { color = fieldState.getColor(index) })
-            }
-            // draw selected cell
-            if (isAnySelected()) {
-                drawRoundRect(cell.apply { setFieldCellXY(selectedCell) },
-                    cellRoundness, cellRoundness,
-                    paint.apply { color = Color.WHITE; style = Paint.Style.STROKE })
-                paint.style = Paint.Style.FILL
-            }
+            drawText("New", newXY.x, newXY.y, paintText)
+
             if (isGamesStarted)  {
                 // draw next block
                 for (index in dropIndices){
-                    drawRoundRect(cell.apply { setDropCellXY(index) },
-                                    cellRoundness, cellRoundness,
-                                        paint.apply { color = nextBlock.getColor(index) })
+                    drawRoundRect(cell.apply { setDropCellXY(index) }, cellRoundness, cellRoundness,
+                                        paintCell.apply { color = nextBlock.getColor(index) })
+                }
+                //draw field
+                for (index in fieldIndices) {
+                    drawRoundRect(cell.apply { setFieldCellXY(index) }, cellRoundness, cellRoundness,
+                        paintCell.apply { color = fieldState.getColor(index) })
+                }
+                // draw selected cell
+                if (isAnySelected()) {
+                    drawRoundRect(cell.apply { setFieldCellXY(selectedCell) }, cellRoundness, cellRoundness, paintStroke)
                 }
                 // draw score
-                drawText("$score", scoreXY.x, scoreXY.y, paint.apply { color = Color.WHITE })
+                drawText("$score", scoreXY.x, scoreXY.y, paintText)
+            }
+            else {
+                // game is not started
+                drawRoundRect(fieldArea,20f,20f, paintCell.apply { color = Colors.EMPTY.rgb })
+                for (i in rules.indices){
+                    drawText(rules[i],
+                        fieldArea.left + fieldArea.width() / 2,
+                        fieldArea.top + fieldArea.height() / 3 - paintText.fontMetrics.ascent * i,
+                        paintText)
+                }
             }
         }
     }
@@ -285,6 +319,7 @@ class FieldView @JvmOverloads constructor(
         }
         return true
     }
+
     private fun processClick(target: Int): Boolean = when {
         // mark colored cell as selected when clicked on it with no cell selected before
         isCellColoured(target) && noSelected() -> { selectedCell = target; true }
@@ -309,6 +344,7 @@ class FieldView @JvmOverloads constructor(
             true
         }
     }
+
     private fun startGame() {
         score = 0
         selectedCell = -1
@@ -319,6 +355,7 @@ class FieldView @JvmOverloads constructor(
         isGamesStarted = true
         toast("Go!")
     }
+
     private fun gameOver() {
         fun getFinalText(): String {
             return when (score) {
@@ -333,11 +370,13 @@ class FieldView @JvmOverloads constructor(
         isGamesStarted = false
         fieldState.fill(Colors.EMPTY.ordinal)
     }
+
     private fun tryMove(from: Int, to: Int): Boolean = when {
         from == to -> false
         isPathExist(from, to) -> fieldState.run { moveCell(from, to) }
         else -> false
     }
+
     private fun isPathExist(from: Int, to: Int): Boolean {
         fun checkAdjacentOf(index: Int) {
             // calculate coordinates of cell in field Matrix
@@ -381,79 +420,94 @@ class FieldView @JvmOverloads constructor(
     }
 
     private fun scoreUp(index: Int): Boolean {
-        color = fieldState[index]
-        val (left, right, up,down, same) = intArrayOf(-1, 1, -1, 1, 0)
-        val line = mutableListOf<Int>()
-        val lines = mutableListOf<Int>()
+        val left = -1
+        val right = 1
+        val up = -1
+        val down = 1
+        val same = 0
+        line.clear()
+        points.clear()
 
-        fun isWithinBounds(x: Int, y: Int) = x >= 0 && y >= 0 && x < size && y < size
+        column = index % size
+        raw = index / size
+        color = fieldState[index]
+        numLinesBuilt = 0
+
+        fun isWithinBounds(x: Int, y: Int): Boolean = x >= 0 && y >= 0 && x < size && y < size
 
         fun checkDirection(deltaX: Int, deltaY: Int) {
             x = column + deltaX
             y = raw + deltaY
-            while (isWithinBounds(x ,y))	{
-                var i = y * size + x
-                if (fieldState[i] != color) break
-                line.add(i)
-                x += deltaX
-                y += deltaY
+            while (isWithinBounds(x ,y)) {
+                (y * size + x).run {// index (aka this) = y * size + x
+                    if (fieldState[this] != color) return // exit from fun once color of current index doesn't match
+                    else {
+                        line.add(this)
+                        x += deltaX
+                        y += deltaY
+                    }
+                }
             }
-        }
-        fun checkLine() {
-            if (line.size >= goal - 1) {
-                line.forEach{ lines.add(it) }
-            }
-            line.clear()
         }
 
-        column = index % size
-        raw = index / size
-        //check from index to North-West direction
+        fun checkLine(): Boolean = when {
+            // + 1 in condition as the index being checked is accountable as well but absent in line buffer
+            line.size + 1 >= goal -> { line.forEach { points.add(it) }; true }
+            else ->  false
+        }
+        //starting from index as it'd be the center of a compass to check all directions comprising vertical, horizontal and 2 diagonal lines
+        //left + right = horizontal line, North-West + South-East = one of two diagonals, etc
+
+        //to North-West
         checkDirection(left, up)
-        //check from index to South-East direction
+        //to South-East
         checkDirection(right, down)
-        //check line, drop indices to lines if success and clear buffer line
-        checkLine()
-        //check from index to North-East direction
-        checkDirection(right, up)
-        //check from index to South-West direction
-        checkDirection(left, down)
-        //check line, drop indices to lines if success and clear buffer line
-        checkLine()
-        //check from index to the left
-        checkDirection(left, same)
-        //check from index to the right
-        checkDirection(right, same)
-        //check line, drop indices to lines if success and clear buffer line
-        checkLine()
-        //check from index to the up
-        checkDirection(same, up)
-        //check from index to the down
-        checkDirection(same, down)
-        //check line, drop indices to lines if success and clear buffer line
-        checkLine()
+        //check the line, drop indices to the points buffer if the goal achieved and clear buffer line
+        if (checkLine()) numLinesBuilt++
+        line.clear()
 
-        if (lines.size > 0){
-            scoreUp = lines.size + 1 // +1 cause index itself is also accountable
+        //to North-East
+        checkDirection(right, up)
+        //to South-West
+        checkDirection(left, down)
+        if (checkLine()) numLinesBuilt++
+        line.clear()
+
+        //to the left
+        checkDirection(left, same)
+        //to the right
+        checkDirection(right, same)
+        if (checkLine()) numLinesBuilt++
+        line.clear()
+
+        //to the up
+        checkDirection(same, up)
+        //to the down
+        checkDirection(same, down)
+        if (checkLine()) numLinesBuilt++
+        line.clear()
+
+        if (points.size > 0){
+            scoreUp = points.size + numLinesBuilt // + because checked index itself is accountable in every line built
             score += scoreUp
-            // clear cells successfully assembled to lines
-            lines.forEach { fieldState[it] = 0 }
-            lines.clear()
-            fieldState[index] = 0
+            // clear field cells successfully assembled to lines
+            points.forEach { fieldState[it] = Colors.EMPTY.ordinal }
+            // clear the cell of index itself
+            fieldState[index] = Colors.EMPTY.ordinal
             toast("+$scoreUp")
             return true
         }
         return false
     }
-    private fun dropCell(color: Int): Int = fieldState.mapIndexed { index, value -> if (value == Colors.EMPTY.ordinal) index else negative }
-                                                        .filter { it > negative }.
-                                                            random().also { random -> fieldState[random] = color }
+
     private fun generateNewBlock() {
         for(i in dropIndices)
             nextBlock[i] = colorsRange.random()
     }
 
-
-
+    private fun dropCell(color: Int): Int = fieldState.mapIndexed { index, value -> if (value == Colors.EMPTY.ordinal) index else negative }
+                                                        .filter { it > negative }
+                                                        .random().also { random -> fieldState[random] = color }
+    //
 }
 

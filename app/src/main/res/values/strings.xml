@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">CustomGameField</string>
+    <string name="app_name">Lines</string>
     <string name="game_title">Game Lines!</string>
     <string name="game_field_content">game field</string>
 </resources>
